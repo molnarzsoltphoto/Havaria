@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MÁV forgalmi térkép</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* MÁVPlusz-stílusú felület: színek itt módosíthatók */
+:root{--bg:#f3f4f7;--card:#fff;--ink:#171a21;--mut:#667085;--line:#e4e7ec;--red:#c8102e;--maj:#dc2626;--min:#ec4899;--soon:#f97316;--hav:#ff1f3d;--r:16px;--sh:0 6px 24px rgba(16,24,40,.16)}
+[data-theme=dark]{--bg:#0e1117;--card:#171b24;--ink:#eef1f6;--mut:#98a2b3;--line:#262c39;--sh:0 6px 24px rgba(0,0,0,.55)}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+#map{position:fixed;inset:0;z-index:0;background:var(--bg)}
+[data-theme=dark] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.92) contrast(.88)}
+.top{position:fixed;z-index:500;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;display:flex;gap:8px;align-items:center;pointer-events:none}
+.top>*{pointer-events:auto}.sp{flex:1;pointer-events:none}
+.pill{background:var(--card);border-radius:999px;box-shadow:var(--sh);padding:9px 15px;display:flex;align-items:center;gap:9px;font-weight:600;white-space:nowrap}
+.logo{background:var(--red);color:#fff;border-radius:8px;padding:2px 8px;font-weight:800}
+.ib{border:0;background:var(--card);color:var(--ink);box-shadow:var(--sh);width:42px;height:42px;border-radius:50%;font-size:17px;cursor:pointer}
+#panel{position:fixed;z-index:500;top:calc(max(10px,env(safe-area-inset-top)) + 54px);left:10px;bottom:10px;width:392px;background:var(--card);border-radius:var(--r);box-shadow:var(--sh);display:flex;flex-direction:column;overflow:hidden}
+#panel.off{display:none}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;padding:13px 8px;border:0;background:none;color:var(--mut);font:inherit;font-weight:700;cursor:pointer;border-bottom:3px solid transparent}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--red)}
+.tabs b{background:var(--bg);border-radius:999px;padding:1px 8px;margin-left:4px;font-size:12px}
+.tab{display:none;overflow:auto;padding:12px;flex:1}.tab.on{display:block}
+label{display:block;font-size:12px;color:var(--mut);font-weight:600;margin-bottom:9px}
+input:not([type=checkbox]),textarea,select{width:100%;margin-top:3px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.chip{border:1px solid var(--line);background:none;color:var(--ink);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
+.chip.on{background:var(--red);border-color:var(--red);color:#fff}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn.pri{background:var(--red);border-color:var(--red);color:#fff}.btn.sm{padding:5px 10px;font-size:12px}
+.meta{color:var(--mut);font-size:12px}.tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:6px 0 10px;font-size:13px}
+.tools label{margin:0;display:flex;gap:5px;align-items:center;color:var(--ink)}
+.card{border:1px solid var(--line);border-left:5px solid var(--maj);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+.card.min{border-left-color:var(--min)}.card.soon{border-left-color:var(--soon)}.card.hv{border-left-color:var(--hav)}.card.off{opacity:.55}
+.ch{display:flex;gap:8px;align-items:flex-start}.ch b{flex:1}
+.ln{background:var(--bg);border-radius:8px;padding:1px 8px;font-weight:800;cursor:pointer}
+.st{font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px;background:var(--bg);white-space:nowrap}
+.desc{margin:6px 0;font-size:13px}.seg{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.seg .btn.sel.j{background:var(--maj);color:#fff;border-color:var(--maj)}.seg .btn.sel.k{background:var(--min);color:#fff;border-color:var(--min)}
+.foot{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:12px;color:var(--mut)}.foot a{color:var(--red);font-weight:600}
+.empty{color:var(--mut);text-align:center;padding:24px 8px}
+.legend{position:fixed;z-index:400;right:10px;bottom:24px;background:var(--card);border-radius:12px;box-shadow:var(--sh);padding:10px 12px;font-size:12px;display:grid;gap:5px}
+.legend span{display:flex;align-items:center;gap:8px}.legend i{width:22px;height:4px;border-radius:2px;display:inline-block}.legend u{width:10px;height:10px;border-radius:50%;display:inline-block;margin:0 6px;text-decoration:none}
+.hav{animation:bl 1s steps(2,start) infinite}@keyframes bl{50%{opacity:.15}}
+@media(prefers-reduced-motion:reduce){.hav{animation:none}}
+.pp{color:#171a21;font-size:12.5px;line-height:1.5;min-width:200px;max-width:290px}.pp hr{border:0;border-top:1px solid #e4e7ec;margin:6px 0}
+#toast{position:fixed;z-index:900;left:50%;bottom:24px;transform:translateX(-50%);background:#171a21;color:#fff;padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:opacity .2s}#toast.on{opacity:1}
+@media(max-width:760px){#panel{top:auto;left:0;right:0;bottom:0;width:auto;height:50vh;border-radius:var(--r) var(--r) 0 0}.legend,#ts{display:none}}
+</style>
+</head>
+<body data-theme="light">
+<div class="top">
+  <div class="pill"><span class="logo">MÁV</span>Forgalmi térkép</div>
+  <div class="pill" id="cnt">Vonatok…</div>
+  <div class="pill" id="ts">–</div>
+  <span class="sp"></span>
+  <button class="ib" id="tg" aria-label="Világos / sötét téma">◐</button>
+  <button class="ib" id="pt" aria-label="Panel megjelenítése">☰</button>
+</div>
+
+<aside id="panel">
+  <div class="tabs" role="tablist">
+    <button class="on" data-t="v" role="tab">Vágányzárak<b id="vn">0</b></button>
+    <button data-t="h" role="tab">Havária<b id="hc">0</b></button>
+  </div>
+
+  <section class="tab on" id="t-v">
+    <input id="q" type="search" placeholder="Keresés vonalszám vagy szöveg alapján">
+    <div class="chips" id="vf">
+      <button class="chip on" data-f="mind">Mind</button><button class="chip" data-f="aktiv">Aktív</button><button class="chip" data-f="hamarosan">Hamarosan</button>
+    </div>
+    <div class="tools">
+      <label><input type="checkbox" id="lt" checked>Vonatok</label>
+      <label><input type="checkbox" id="lv" checked>Vágányzárak</label>
+      <button class="btn sm" id="rf">Frissítés</button><span class="meta" id="vts">–</span>
+    </div>
+    <div id="vlist"></div>
+  </section>
+
+  <section class="tab" id="t-h">
+    <p class="meta" style="margin:0 0 10px">A havária azonnal villogó, vastag piros vonalként jelenik meg a térképen, és minden megnyitott példányon frissül.</p>
+    <form id="hf" autocomplete="off">
+      <input type="hidden" id="hid">
+      <label>Vonal<input id="hl" list="hdl" required placeholder="pl. 29: Börgönd–Szabadbattyán–Tapolca"></label>
+      <datalist id="hdl"></datalist>
+      <label>Ok<input id="hr" required maxlength="120" placeholder="pl. Felsővezeték-szakadás"></label>
+      <label>Helyszín<input id="hp" maxlength="200" placeholder="pl. két állomás között, szelvény"></label>
+      <div class="row">
+        <label>Kezdete<input type="datetime-local" id="hs" required></label>
+        <label>Várható vége<input type="datetime-local" id="he" required></label>
+      </div>
+      <label>Megjegyzés<textarea id="hnote" rows="2" maxlength="600" placeholder="Pótlóbusz, kerülőút, tájékoztatási link"></textarea></label>
+      <div class="row"><button class="btn pri" id="hsub">Havária rögzítése</button><button type="button" class="btn" id="hreset">Új űrlap</button></div>
+    </form>
+    <h3 style="margin:18px 0 8px;font-size:14px">Rögzített események</h3>
+    <div id="hlist"></div>
+  </section>
+</aside>
+
+<div class="legend">
+  <span><i style="background:#dc2626"></i>Jelentős vágányzár</span>
+  <span><i style="background:#ec4899"></i>Kisebb vágányzár</span>
+  <span><i style="background:#f97316"></i>Közelgő vágányzár</span>
+  <span><i style="background:#ff1f3d;height:6px" class="hav"></i>Havária</span>
+  <span><u style="background:#22c55e"></u><u style="background:#eab308"></u><u style="background:#f97316"></u><u style="background:#ef4444"></u>késés</span>
+</div>
+<div id="toast" role="status"></div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+'use strict';
+/* ── beállítások ── */
+const GEO_URL='vasut-vonalak.geojson';                       // a HTML mellett kell lennie
+const FB='https://abigel-7e1eb-default-rtdb.europe-west1.firebasedatabase.app/havaria.json'; // havária szinkron (üres sztringre állítva kikapcsolható)
+const SRC='https://www.mavcsoport.hu/mav-szemelyszallitas/belfoldi-utazas/vaganyzar';
+const CK='abigel_vaganyzar_cache',SEVK='abigel_vaganyzar_sev',HIDK='abigel_vaganyzar_hidden_lines',HK='mavmap_havaria',THK='mavmap_theme';
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
+const SV=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const nr=r=>(r||'').toString().trim().split(' ')[0];
+const url=u=>/^https?:\/\//.test(u||'')?u:'';
+const fmt=d=>new Date(d).toLocaleString('hu-HU',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+const lt=d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16);
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),3200)}
+
+/* ── téma, panel, fülek ── */
+function theme(t){document.body.dataset.theme=t;SV(THK,t)}
+theme(LS(THK,matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
+$('#tg').onclick=()=>theme(document.body.dataset.theme==='dark'?'light':'dark');
+$('#pt').onclick=()=>$('#panel').classList.toggle('off');
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button,.tab').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');$('#t-'+b.dataset.t).classList.add('on')});
+
+/* ── térkép ── */
+const map=L.map('map',{center:[47.2,19.4],zoom:7,zoomControl:false});
+L.control.zoom({position:'topright'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | holavonat.is'}).addTo(map);
+const tl=L.layerGroup().addTo(map),cv=L.canvas();
+$('#lt').onchange=e=>e.target.checked?tl.addTo(map):map.removeLayer(tl);
+$('#lv').onchange=()=>draw(true);
+
+/* ── GeoJSON ── */
+let GEO=null;
+async function geo(){
+  if(GEO)return GEO;
+  try{const r=await fetch(GEO_URL,{cache:'force-cache'});if(!r.ok)throw 0;GEO=await r.json();
+    $('#hdl').innerHTML=[...new Set(GEO.features.map(f=>f.properties&&f.properties.name).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,'hu',{numeric:true})).map(n=>'<option value="'+esc(n)+'">').join('')}
+  catch(e){toast('A vasut-vonalak.geojson nem érhető el – hosztolva nyisd meg, a HTML mellé téve')}
+  return GEO}
+
+/* ── vágányzár: lekérés + feldolgozás ── */
+const HU={'január':1,'február':2,'március':3,'április':4,'május':5,'június':6,'július':7,'augusztus':8,'szeptember':9,'október':10,'november':11,'december':12};
+const pd=s=>{const m=(s||'').toLowerCase().replace(/\u00a0/g,' ').match(/(\d{4})\.\s*([a-záéíóöőúüű]+)\s*(\d{1,2})\./);return m&&HU[m[2]]?new Date(+m[1],HU[m[2]]-1,+m[3]):null};
+const mk=(line,route,s,e,desc,link)=>({line,route,startRaw:s,endRaw:e,startDate:pd(s),endDate:pd(e),desc,link});
+const PROXY=[u=>'https://api.allorigins.win/get?url='+encodeURIComponent(u),u=>'https://thingproxy.freeboard.io/fetch/'+u,u=>'https://corsproxy.io/?url='+encodeURIComponent(u),u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)];
+async function fetchSrc(){
+  for(let i=0;i<PROXY.length;i++){
+    try{const r=await fetch(PROXY[i](SRC),{signal:AbortSignal.timeout(20000)});if(!r.ok)throw 0;
+      const t=i===0?(await r.json()).contents:await r.text();if(t&&t.length>500)return t}catch(e){}}
+  try{const r=await fetch('https://r.jina.ai/'+SRC,{signal:AbortSignal.timeout(25000)});const t=await r.text();if(r.ok&&t.length>500)return{md:t}}catch(e){}
+  throw new Error('a mavcsoport.hu nem érhető el')}
+function pMd(md){
+  let route='Vágányzár';const o=[];
+  for(let l of md.split('\n')){l=l.trim();if(!l)continue;
+    const h=l.match(/^\*(.+?)\*$/);if(h&&!l.includes('|')){route=h[1].replace(/\\-/g,'-').trim();continue}
+    if(l[0]!=='|'||/^\|[\s\-:|]+\|$/.test(l)||l.includes('Érvényesség kezdete'))continue;
+    const c=l.split('|').map(x=>x.trim()).slice(1,-1);if(c.length<4)continue;
+    const raw=c.slice(3).join(' ');if(!raw)continue;const lm=raw.match(/\]\(([^)]+)\)/);
+    o.push(mk(c[0],route,c[1],c[2],raw.replace(/\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/\\-/g,'-').replace(/\s+/g,' ').trim(),lm?lm[1]:''))}
+  return o}
+function pHtml(html){
+  const doc=new DOMParser().parseFromString(html,'text/html'),o=[];
+  doc.querySelectorAll('table').forEach(t=>{
+    let route='Vágányzár',el=t.previousElementSibling,n=0;
+    while(el&&n++<6){const x=(el.textContent||'').trim();if(x&&x.length<120&&!/érvényesség/i.test(x)){route=x.replace(/^\*|\*$/g,'').trim();break}el=el.previousElementSibling}
+    t.querySelectorAll('tr').forEach(r=>{const c=r.querySelectorAll('td');if(c.length<3)return;
+      const d=c[3]||c[c.length-1],a=d.querySelector('a');let href=a?a.getAttribute('href'):'';
+      if(href&&href[0]==='/')href='https://www.mavcsoport.hu'+href;
+      const desc=d.textContent.replace(/\s+/g,' ').trim();
+      if(desc)o.push(mk(c[0].textContent.trim(),route,c[1].textContent.trim(),c[2].textContent.trim(),desc,href))})});
+  return o}
+const st=c=>{const t=new Date();t.setHours(0,0,0,0);return c.endDate&&c.endDate<t?'lejart':c.startDate&&c.startDate>t?'hamarosan':'aktiv'};
+const ckey=c=>(c.line||'')+'|'+(c.startRaw||'')+'|'+(c.endRaw||'')+'|'+(c.desc||'').slice(0,60);
+
+let V=[],vf='mind';
+(function(){const c=LS(CK,null);if(c&&c.data)V=c.data.map(d=>({...d,startDate:d.startDate?new Date(d.startDate):null,endDate:d.endDate?new Date(d.endDate):null}))})();
+async function loadV(){
+  const b=$('#rf');b.disabled=true;$('#vts').textContent='Frissítés…';
+  try{const t=await fetchSrc(),d=t.md?pMd(t.md):pHtml(t);
+    if(!d.length)throw new Error('nem sikerült adatot kinyerni (szerkezet változhatott)');
+    V=d;SV(CK,{ts:Date.now(),data:d});$('#vts').textContent='Frissítve: '+new Date().toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit'})}
+  catch(e){$('#vts').textContent='Hiba: '+e.message}
+  b.disabled=false;renderV();draw()}
+$('#rf').onclick=loadV;
+
+/* ── vágányzár lista ── */
+function renderV(){
+  const q=$('#q').value.toLowerCase().trim(),sev=LS(SEVK,{}),hid=new Set(LS(HIDK,[])),o={aktiv:0,hamarosan:1};
+  const l=V.map(c=>({...c,s:st(c)})).filter(c=>c.s!=='lejart'&&(vf==='mind'||c.s===vf)&&(!q||(c.line+c.route+c.desc).toLowerCase().includes(q)))
+    .sort((a,b)=>o[a.s]-o[b.s]||(a.startDate||0)-(b.startDate||0));
+  $('#vn').textContent=V.filter(c=>st(c)==='aktiv').length;
+  $('#vlist').innerHTML=l.length?l.map(c=>{
+    const k=ckey(c),sv=sev[k]||'',lk=nr(c.line),cls=c.s==='hamarosan'?' soon':sv==='kisebb'?' min':'';
+    return '<div class="card'+cls+'"><div class="ch"><span class="ln" data-z="'+esc(lk)+'" title="Ugrás a térképen">'+esc(c.line)+'</span><b>'+esc(c.route)+'</b><span class="st">'+(c.s==='aktiv'?'Aktív':'Hamarosan')+'</span></div>'
+      +'<div class="desc">'+esc(c.desc.slice(0,360))+(c.desc.length>360?'…':'')+'</div>'
+      +'<div class="seg"><span class="meta">Térkép-jelölés:</span>'
+      +'<button class="btn sm j'+(sv!=='kisebb'?' sel':'')+'" data-k="'+esc(k)+'" data-v="jelentos">Jelentős</button>'
+      +'<button class="btn sm k'+(sv==='kisebb'?' sel':'')+'" data-k="'+esc(k)+'" data-v="kisebb">Kisebb</button>'
+      +'<label style="margin:0 0 0 auto;display:flex;gap:5px;align-items:center;color:var(--ink)"><input type="checkbox" data-hl="'+esc(lk)+'"'+(hid.has(lk)?'':' checked')+'>Térképen</label></div>'
+      +'<div class="foot"><span>'+esc((c.startRaw||'?')+' – '+(c.endRaw||'?'))+'</span>'+(url(c.link)?'<a href="'+esc(url(c.link))+'" target="_blank" rel="noopener">Hirdetmény</a>':'')+'</div></div>'}).join('')
+    :'<p class="empty">'+(V.length?'Nincs a szűrésnek megfelelő vágányzár.':'Nincs betöltött adat – kattints a Frissítésre.')+'</p>'}
+$('#q').oninput=renderV;
+$('#vf').onclick=e=>{const b=e.target.closest('.chip');if(!b)return;vf=b.dataset.f;document.querySelectorAll('#vf .chip').forEach(x=>x.classList.toggle('on',x===b));renderV()};
+$('#vlist').onclick=e=>{
+  const s=e.target.closest('[data-k]');
+  if(s){const m=LS(SEVK,{}),k=s.dataset.k;if(s.dataset.v==='kisebb'&&m[k]!=='kisebb')m[k]='kisebb';else delete m[k];SV(SEVK,m);renderV();draw();return}
+  const z=e.target.closest('[data-z]');if(z)zoomTo(z.dataset.z)};
+$('#vlist').onchange=e=>{const k=e.target.dataset.hl;if(!k)return;const h=new Set(LS(HIDK,[]));h.has(k)?h.delete(k):h.add(k);SV(HIDK,[...h]);draw()};
+
+/* ── havária ── */
+let hav=LS(HK,[]);
+const hAct=h=>{const n=Date.now();return h.on!==false&&new Date(h.start)<=n&&new Date(h.end)>=n};
+const hState=h=>h.on===false?'Felfüggesztve':hAct(h)?'Aktív':new Date(h.start)>Date.now()?'Ütemezett':'Lezárt';
+function saveHav(){SV(HK,hav);if(FB)fetch(FB,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(hav)}).catch(()=>{})}
+async function syncHav(){
+  if(!FB)return;
+  try{const r=await fetch(FB,{cache:'no-store'});if(!r.ok)return;const d=await r.json();
+    if(d==null){if(hav.length)saveHav();return}
+    hav=Array.isArray(d)?d.filter(Boolean):Object.values(d);SV(HK,hav);renderH();draw()}catch(e){}}
+function resetH(){$('#hf').reset();$('#hid').value='';$('#hs').value=lt(new Date());$('#hsub').textContent='Havária rögzítése'}
+function renderH(){
+  const o={Aktív:0,Ütemezett:1,Felfüggesztve:2,Lezárt:3};
+  const l=[...hav].sort((a,b)=>o[hState(a)]-o[hState(b)]||new Date(b.start)-new Date(a.start));
+  $('#hc').textContent=hav.filter(hAct).length;
+  $('#hlist').innerHTML=l.length?l.map(h=>{const s=hState(h);
+    return '<div class="card hv'+(s==='Lezárt'||s==='Felfüggesztve'?' off':'')+'"><div class="ch"><span class="ln" data-z="'+esc(h.ref)+'">'+esc(h.ref)+'</span><b>'+esc(h.reason)+'</b><span class="st">'+s+'</span></div>'
+      +'<div class="desc">'+esc(h.name)+(h.place?'<br>'+esc(h.place):'')+(h.note?'<br><i>'+esc(h.note)+'</i>':'')+'</div>'
+      +'<div class="foot"><span>'+fmt(h.start)+' – '+fmt(h.end)+'</span></div>'
+      +'<div class="seg" data-id="'+esc(h.id)+'"><button class="btn sm" data-a="edit">Szerkesztés</button>'
+      +(s==='Aktív'||s==='Ütemezett'?'<button class="btn sm" data-a="close">Lezárás most</button>':'')
+      +'<button class="btn sm" data-a="del">Törlés</button></div></div>'}).join('')
+    :'<p class="empty">Még nincs rögzített havária.</p>'}
+$('#hf').onsubmit=async e=>{
+  e.preventDefault();await geo();
+  const name=$('#hl').value.trim(),ref=nr(name.split(':')[0]);
+  if(GEO&&!GEO.features.some(f=>nr(f.properties&&f.properties.ref)===ref))return toast('Ismeretlen vonal – válassz a listából');
+  if(new Date($('#he').value)<=new Date($('#hs').value))return toast('A várható vége legyen a kezdete után');
+  const h={id:$('#hid').value||'h'+Date.now(),ref,name,reason:$('#hr').value.trim(),place:$('#hp').value.trim(),start:$('#hs').value,end:$('#he').value,note:$('#hnote').value.trim(),on:true};
+  const i=hav.findIndex(x=>x.id===h.id);i<0?hav.unshift(h):hav[i]=h;
+  saveHav();resetH();renderH();draw();toast('Havária rögzítve – megjelent a térképen')};
+$('#hreset').onclick=resetH;
+$('#hlist').onclick=e=>{
+  const z=e.target.closest('[data-z]');if(z)return zoomTo(z.dataset.z);
+  const b=e.target.closest('[data-a]');if(!b)return;
+  const id=b.parentNode.dataset.id,h=hav.find(x=>x.id===id);if(!h)return;
+  if(b.dataset.a==='edit'){$('#hid').value=h.id;$('#hl').value=h.name;$('#hr').value=h.reason;$('#hp').value=h.place||'';$('#hs').value=h.start;$('#he').value=h.end;$('#hnote').value=h.note||'';$('#hsub').textContent='Módosítás mentése';$('#hf').scrollIntoView({behavior:'smooth'});return}
+  if(b.dataset.a==='close'){h.end=lt(new Date());if(new Date(h.start)>new Date(h.end))h.start=h.end}
+  if(b.dataset.a==='del'){if(!confirm('Törlöd ezt a havária bejegyzést?'))return;hav=hav.filter(x=>x.id!==id)}
+  saveHav();renderH();draw()};
+
+/* ── vonalak rajzolása ── */
+let vLayer=null,hLayer=null,sig='';
+async function draw(force){
+  const g=await geo();if(!g)return;
+  const sev=LS(SEVK,{}),hid=new Set(LS(HIDK,[])),info=new Map(),hv=new Map();
+  if($('#lv').checked)V.forEach(c=>{const s=st(c),k=nr(c.line);if(s==='lejart'||!k||hid.has(k))return;
+    if(!info.has(k))info.set(k,[]);info.get(k).push({c,s,min:s==='aktiv'&&sev[ckey(c)]==='kisebb'})});
+  const rank=i=>i.s==='aktiv'?(i.min?1:0):2,col=i=>i.s==='hamarosan'?'#f97316':i.min?'#ec4899':'#dc2626';
+  info.forEach(a=>a.sort((x,y)=>rank(x)-rank(y)));
+  hav.filter(hAct).forEach(h=>{if(!hv.has(h.ref))hv.set(h.ref,[]);hv.get(h.ref).push(h)});
+  const sg=JSON.stringify([[...info].map(([k,a])=>[k,a.map(i=>col(i)+i.c.desc.length)]),[...hv]]);
+  if(!force&&sg===sig)return;sig=sg;
+  [vLayer,hLayer].forEach(l=>l&&map.removeLayer(l));vLayer=hLayer=null;
+  const ref=f=>nr(f.properties&&f.properties.ref);
+  if(info.size)vLayer=L.geoJSON(g,{filter:f=>info.has(ref(f)),style:f=>({color:col(info.get(ref(f))[0]),weight:3.5,opacity:.9}),
+    onEachFeature:(f,ly)=>{const a=info.get(ref(f));
+      ly.bindPopup('<div class="pp"><b>'+esc(f.properties.name||f.properties.ref)+'</b> <span style="color:#667085">'+a.length+' vágányzár</span>'+a.map(i=>
+        '<hr><b>'+(i.s==='hamarosan'?'Közelgő':i.min?'Kisebb':'Jelentős')+'</b> · '+esc((i.c.startRaw||'?')+' – '+(i.c.endRaw||'?'))
+        +'<br><span style="color:#555">'+esc(i.c.desc.slice(0,110))+(i.c.desc.length>110?'…':'')+'</span>'
+        +(url(i.c.link)?'<br><a href="'+esc(url(i.c.link))+'" target="_blank" rel="noopener" style="color:#c8102e">Hirdetmény</a>':'')).join('')+'</div>')}}).addTo(map);
+  if(hv.size)hLayer=L.geoJSON(g,{filter:f=>hv.has(ref(f)),style:()=>({color:'#ff1f3d',weight:6,opacity:1,className:'hav'}),
+    onEachFeature:(f,ly)=>ly.bindPopup('<div class="pp"><b style="color:#c8102e">HAVÁRIA</b> · '+esc(f.properties.name||f.properties.ref)+hv.get(ref(f)).map(h=>
+      '<hr><b>'+esc(h.reason)+'</b>'+(h.place?'<br>'+esc(h.place):'')+'<br>'+fmt(h.start)+' – '+fmt(h.end)+(h.note?'<br><span style="color:#555">'+esc(h.note)+'</span>':'')).join('')+'</div>')}).addTo(map)}
+function zoomTo(k){
+  const b=L.latLngBounds([]);
+  [vLayer,hLayer].forEach(l=>l&&l.eachLayer(ly=>{if(nr(ly.feature.properties.ref)===k)b.extend(ly.getBounds())}));
+  if(b.isValid())map.fitBounds(b,{padding:[60,60]});else toast('A vonal nincs a térképen (rejtett vagy lejárt)')}
+
+/* ── élő vonatok ── */
+function pos(v){
+  if(v.lat&&v.lon&&Math.abs(v.lat)>1)return[v.lat,v.lon];
+  const p=v.position;if(p&&p.latitude&&Math.abs(p.latitude)>1)return[p.latitude,p.longitude];
+  const s=(v.trip&&v.trip.stoptimes)||[];if(!s.length)return null;
+  const sr=v.stopRelationship||{},sn=sr.stop&&sr.stop.name;let i=s.findIndex(x=>x.stop&&x.stop.name===sn);if(i<0)i=0;
+  const ok=z=>z&&z.lat&&Math.abs(z.lat)>1;
+  if(sr.status==='IN_TRANSIT_TO'&&i>0&&ok(s[i-1].stop)&&ok(s[i].stop))return[(s[i-1].stop.lat+s[i].stop.lat)/2,(s[i-1].stop.lon+s[i].stop.lon)/2];
+  if(ok(s[i].stop))return[s[i].stop.lat,s[i].stop.lon];
+  const f=s.find(x=>ok(x.stop));return f?[f.stop.lat,f.stop.lon]:null}
+const dc=m=>m==null?'#16a34a':m<=5?'#22c55e':m<=15?'#eab308':m<=60?'#f97316':'#ef4444';
+async function trains(){
+  try{const r=await fetch('https://cdn.holavonat.is/train_data_v3.json',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();tl.clearLayers();let n=0;
+    for(const v of d.vehiclePositions||[]){
+      const p=pos(v);if(!p||p[0]<45||p[0]>49||p[1]<15||p[1]>23)continue;
+      const t=v.trip||{},sr=v.stopRelationship||{},stop=(sr.stop&&sr.stop.name)||'–',stt=t.stoptimes||[];
+      const cur=stt.find(x=>x.stop&&x.stop.name===stop),m=cur&&cur.arrivalDelay!=null?Math.round(cur.arrivalDelay/60):null;
+      const nm=(t.tripShortName||(t.route&&(t.route.longName||t.route.shortName))||'Ismeretlen').replace(/<[^>]+>/g,'');
+      const ci=Math.max(0,stt.findIndex(x=>x.stop&&x.stop.name===stop));
+      const rows=stt.slice(Math.max(0,ci-1),ci+3).map(x=>'<tr'+(x.stop&&x.stop.name===stop?' style="font-weight:700"':'')+'><td style="padding-right:8px">'+(x.scheduledArrival!=null?new Date(x.scheduledArrival*1000).toISOString().slice(11,16):'–')
+        +(x.arrivalDelay>=60?'<span style="color:#f97316"> +'+Math.round(x.arrivalDelay/60)+"'</span>":'')+'</td><td>'+esc(x.stop&&x.stop.name)+'</td></tr>').join('');
+      L.circleMarker(p,{renderer:cv,radius:5.5,color:'#fff',weight:1.5,fillColor:dc(m),fillOpacity:1})
+        .bindPopup('<div class="pp"><b>'+esc(nm)+'</b><br>'+esc(stop)+' · '+(sr.status==='IN_TRANSIT_TO'?'felé tart':'állomáson')
+          +(m!=null?'<br><b style="color:'+dc(m)+'">'+(m>0?'+'+m+' perc késés':'Menetrendszerű')+'</b>':'')+(rows?'<table style="margin-top:6px;border-collapse:collapse">'+rows+'</table>':'')+'</div>').addTo(tl);n++}
+    $('#cnt').textContent=n+' jármű';
+    $('#ts').textContent='Frissítve: '+new Date(d.timestamp||Date.now()).toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+  catch(e){$('#cnt').textContent='Vonatadat hiba: '+e.message}}
+
+/* ── indítás + automatikus frissítés ── */
+resetH();renderV();renderH();geo().then(draw);syncHav();trains();
+const cache=LS(CK,null);if(!cache||Date.now()-cache.ts>3*36e5)loadV();else $('#vts').textContent='Gyorsítótár: '+new Date(cache.ts).toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit'});
+setInterval(trains,30e3);          // vonatok: 30 mp
+setInterval(syncHav,60e3);         // havária: 60 mp
+setInterval(()=>{renderV();renderH();draw()},60e3); // státuszok újraértékelése (lejárat, kezdés)
+setInterval(loadV,30*60e3);        // vágányzárak újraolvasása: 30 perc
+</script>
+</body>
+</html>
