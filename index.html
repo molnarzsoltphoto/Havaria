@@ -122,6 +122,7 @@ const GEO_URL='vasut-vonalak.geojson';                       // a HTML mellett k
 const FB='https://abigel-7e1eb-default-rtdb.europe-west1.firebasedatabase.app/havaria.json'; // havária szinkron (üres sztringre állítva kikapcsolható)
 const FS='https://abigel-7e1eb-default-rtdb.europe-west1.firebasedatabase.app/vaganyzar-beallitasok'; // jelentős/kisebb jelölés + térkép-láthatóság szinkron (üresre állítva kikapcsolható)
 const SRC='https://www.mavcsoport.hu/mav-szemelyszallitas/belfoldi-utazas/vaganyzar';
+const VZ_JSON='https://raw.githubusercontent.com/molnarzsoltphoto/abigel-stats/main/data/vaganyzar.json'; // abigel-stats gyűjtő (6 óránként); ha nem elérhető, böngészős proxy
 const CK='abigel_vaganyzar_cache',SEVK='abigel_vaganyzar_sev',HIDK='abigel_vaganyzar_hidden_lines',HK='mavmap_havaria',THK='mavmap_theme';
 
 const $=s=>document.querySelector(s);
@@ -203,7 +204,9 @@ let V=[],vf='mind';
 (function(){const c=LS(CK,null);if(c&&c.data)V=c.data.map(d=>({...d,startDate:d.startDate?new Date(d.startDate):null,endDate:d.endDate?new Date(d.endDate):null}))})();
 async function loadV(){
   const b=$('#rf');b.disabled=true;$('#vts').textContent='Frissítés…';
-  try{const t=await fetchSrc(),d=t.md?pMd(t.md):pHtml(t);
+  try{let d=null;
+    try{const j=await fetch(VZ_JSON+'?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(12000)});if(j.ok){const o=await j.json();if(o&&Array.isArray(o.tetelek)&&o.tetelek.length>=3){d=o.tetelek.map(x=>mk(x.line,x.route,x.startRaw,x.endRaw,x.desc,x.link));$('#vts').title='Forrás: abigel-stats gyűjtő, '+(o.frissitve||'').slice(0,16).replace('T',' ')}}}catch(e){}
+    if(!d){const t=await fetchSrc();d=t.md?pMd(t.md):pHtml(t)}
     if(!d.length)throw new Error('nem sikerült adatot kinyerni (szerkezet változhatott)');
     V=d;SV(CK,{ts:Date.now(),data:d});$('#vts').textContent='Frissítve: '+new Date().toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit'})}
   catch(e){$('#vts').textContent='Hiba: '+e.message}
